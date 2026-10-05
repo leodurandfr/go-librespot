@@ -256,6 +256,25 @@ func (c *Spclient) PutConnectStateInactive(ctx context.Context, spotConnId strin
 	}
 }
 
+// TransferFromActive asks Spotify to move the session from whichever device is
+// active to this one: naming this device as both ends of the transfer means
+// "from the active device". Sent once: a transfer is not idempotent, and one resent after Spotify accepted
+// it would arrive while this device is already active.
+func (c *Spclient) TransferFromActive(ctx context.Context) error {
+	body := []byte(`{"transfer_options":{"restore_paused":"resume"}}`)
+	resp, err := c.RequestOnce(ctx, "POST",
+		fmt.Sprintf("/connect-state/v1/connect/transfer/from/%s/to/%s", c.deviceId, c.deviceId),
+		nil, http.Header{"Content-Type": []string{"application/json"}}, body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &StatusError{Op: "transfer", StatusCode: resp.StatusCode}
+	}
+	return nil
+}
+
 func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqProto *connectpb.PutStateRequest) (*connectpb.Cluster, error) {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {
